@@ -20,10 +20,12 @@ import contextlib
 import os
 import shutil
 import sys
+import tempfile
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 MAX_DURATION = int(os.environ.get("MAX_DURATION_SECONDS", "3600"))
@@ -32,7 +34,14 @@ POT_PROVIDER_URL = os.environ.get("POT_PROVIDER_URL", "")
 MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT", "3"))
 UPDATE_INTERVAL = 12 * 3600
 
+# Progressive (video+audio in one file) — pipeable straight to the response.
 FORMAT = "best[ext=mp4][height<=480]/best[height<=480]/best"
+# Separate streams merged with ffmpeg — needs a temp file (stdout can't be
+# muxed). YouTube often serves only DASH formats to logged-in/datacenter
+# clients, making the progressive selector fail with "Requested format is
+# not available".
+FORMAT_MERGE = ("bv*[height<=480][ext=mp4]+ba[ext=m4a]/"
+                "bv*[height<=480]+ba/bv*+ba/b")
 
 semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 app = FastAPI(title="EdadPlay fetch helper")
@@ -63,7 +72,7 @@ async def startup():
     asyncio.create_task(self_update_loop())
 
 
-def base_args() -> list[str]:
+def base_args(fmt: str = FORMAT, output: str = "-") -> list[str]:
     args = [
         "yt-dlp", "--quiet", "--no-warnings", "--no-playlist",
         "--match-filter", f"duration<={MAX_DURATION}",
@@ -71,8 +80,11 @@ def base_args() -> list[str]:
         "--retries", "3",
         "--fragment-retries", "3",
         "--force-ipv4",
-        "-f", FORMAT,
-        "-o", "-",
+        # YouTube needs a JS runtime for full format extraction (EJS);
+        # without one, most formats are missing and selectors fail.
+        "--js-runtimes", "node",
+        "-f", fmt,
+        "-o", output,
     ]
     if COOKIES_FILE and os.path.exists(COOKIES_FILE):
         args += ["--cookies", COOKIES_FILE]
@@ -132,6 +144,31 @@ async def health():
     }
 
 
+async def fetch_merged(url: str, extra: list[str]) -> FileResponse | None:
+    """Download separate video+audio streams and merge with ffmpeg.
+
+    Used when no progressive format exists: merging can't go through a pipe,
+    so this downloads to a temp dir, streams the file and deletes it after.
+    """
+    tmpdir = tempfile.mkdtemp(prefix="edadplay-")
+    proc = await asyncio.create_subprocess_exec(
+        *base_args(FORMAT_MERGE, os.path.join(tmpdir, "video.%(ext)s")),
+        "--merge-output-format", "mp4", *extra, url,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await proc.wait()
+    files = os.listdir(tmpdir) if proc.returncode == 0 else []
+    if not files:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        return None
+    return FileResponse(
+        os.path.join(tmpdir, files[0]),
+        media_type="video/mp4",
+        background=BackgroundTask(shutil.rmtree, tmpdir, ignore_errors=True),
+    )
+
+
 @app.get("/api/fetch")
 async def fetch(url: str = Query(..., max_length=500)):
     if not url.startswith(("http://", "https://")):
@@ -163,6 +200,16 @@ async def fetch(url: str = Query(..., max_length=500)):
 
             stderr = (await proc.stderr.read()).decode(errors="replace")
             await proc.wait()
+
+            if "requested format is not available" in stderr.lower():
+                merged = await fetch_merged(url, extra)
+                if merged:
+                    return merged
+                last_error = HTTPException(
+                    502, "La plataforma no ofrece un formato descargable para este vídeo. "
+                         "Descarga el vídeo y usa «Archivo local».")
+                continue
+
             last_error = classify_error(stderr)
             # Only retryable network/bot errors benefit from another attempt.
             if last_error.status_code not in (502, 503):

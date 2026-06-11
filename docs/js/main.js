@@ -182,15 +182,24 @@ function applyMode() {
 
 function setProgress(videoP, audioP, label) {
   const p = Math.round((videoP * 0.8 + audioP * 0.2) * 100);
+  $('#progress-bar').classList.remove('indeterminate');
   $('#progress-bar').style.width = `${p}%`;
   $('#progress-label').textContent = label || `Analizando… ${p}%`;
 }
 
-function startProgress(label) {
+// Animated bar for phases without a known total (server fetch, download).
+function setBusyProgress(label) {
+  $('#progress-bar').classList.add('indeterminate');
+  $('#progress-bar').style.width = '';
+  $('#progress-label').textContent = label;
+}
+
+function startProgress(label, busy = false) {
   clearError();
   $('#progress-wrap').hidden = false;
   $('#analyze-btn').disabled = true;
-  setProgress(0, 0, label);
+  if (busy) setBusyProgress(label);
+  else setProgress(0, 0, label);
 }
 
 function stopProgress() {
@@ -248,14 +257,35 @@ async function analyze(file) {
 const STREAMING_HOSTS = /(^|\.)(youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|tiktok\.com|instagram\.com|facebook\.com|twitch\.tv|reddit\.com|twitter\.com|x\.com)$/i;
 
 async function fetchAsFile(fetchUrl, displayName, label) {
-  startProgress(label);
+  startProgress(label, true);
   const resp = await fetch(fetchUrl, { mode: 'cors' });
   if (!resp.ok) {
     let detail = '';
     try { detail = (await resp.json()).detail || ''; } catch { /* not JSON */ }
     throw new Error(detail || `El servidor respondió ${resp.status}.`);
   }
-  const blob = await resp.blob();
+
+  const total = Number(resp.headers.get('Content-Length')) || 0;
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    const mb = (received / 1048576).toFixed(1).replace('.', ',');
+    if (total) {
+      const pct = Math.min(100, Math.round((received / total) * 100));
+      $('#progress-bar').classList.remove('indeterminate');
+      $('#progress-bar').style.width = `${pct}%`;
+      $('#progress-label').textContent = `Descargando vídeo… ${mb} MB (${pct}%)`;
+    } else {
+      setBusyProgress(`Descargando vídeo… ${mb} MB`);
+    }
+  }
+
+  const blob = new Blob(chunks, { type: resp.headers.get('Content-Type') || 'video/mp4' });
   return new File([blob], displayName, { type: blob.type || 'video/mp4' });
 }
 
@@ -296,7 +326,7 @@ async function analyzeYoutube(rawUrl) {
     const file = await fetchAsFile(
       `${BACKEND_URL.replace(/\/$/, '')}/api/fetch?url=${encodeURIComponent(rawUrl)}`,
       'video_online.mp4',
-      'Obteniendo vídeo de la plataforma… (puede tardar un poco)',
+      'Conectando con la plataforma… el servidor está preparando el vídeo, puede tardar 1-2 minutos. No cierres esta pestaña.',
     );
     await analyze(file);
   } catch (e) {
