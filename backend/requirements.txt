@@ -1,4 +1,5 @@
 fastapi
 uvicorn[standard]
 yt-dlp[default,curl-cffi]
+yt-dlp-ejs
 bgutil-ytdlp-pot-provider

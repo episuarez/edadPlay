@@ -24,7 +24,7 @@ import tempfile
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
@@ -35,7 +35,12 @@ MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT", "3"))
 UPDATE_INTERVAL = 12 * 3600
 
 # Progressive (video+audio in one file) — pipeable straight to the response.
-FORMAT = "best[ext=mp4][height<=480]/best[height<=480]/best"
+# Prefer plain https: m3u8 formats pipe out as MPEG-TS, which browsers
+# can't decode as a File. m3u8 still works via the merge fallback (ffmpeg
+# remuxes to mp4 on disk).
+FORMAT = ("best[ext=mp4][height<=480][protocol=https]/"
+          "best[height<=480][protocol=https]/best[protocol=https]/"
+          "best[ext=mp4][height<=480]/best[height<=480]/best")
 # Separate streams merged with ffmpeg — needs a temp file (stdout can't be
 # muxed). YouTube often serves only DASH formats to logged-in/datacenter
 # clients, making the progressive selector fail with "Requested format is
@@ -59,7 +64,7 @@ async def self_update_loop():
         with contextlib.suppress(Exception):
             proc = await asyncio.create_subprocess_exec(
                 sys.executable, "-m", "pip", "install", "-q", "-U",
-                "yt-dlp[default,curl-cffi]", "bgutil-ytdlp-pot-provider",
+                "yt-dlp[default,curl-cffi]", "yt-dlp-ejs", "bgutil-ytdlp-pot-provider",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -80,9 +85,9 @@ def base_args(fmt: str = FORMAT, output: str = "-") -> list[str]:
         "--retries", "3",
         "--fragment-retries", "3",
         "--force-ipv4",
-        # YouTube needs a JS runtime for full format extraction (EJS);
-        # without one, most formats are missing and selectors fail.
-        "--js-runtimes", "node",
+        # YouTube needs a JS runtime + solver (EJS) for full format
+        # extraction; without one, only storyboards are extractable.
+        "--js-runtimes", "deno",
         "-f", fmt,
         "-o", output,
     ]
@@ -133,18 +138,31 @@ def classify_error(stderr: str) -> HTTPException:
     return HTTPException(502, f"No se pudo obtener el vídeo: {stderr[-300:]}")
 
 
+async def _cmd_version(*cmd: str) -> str:
+    if shutil.which(cmd[0]) is None:
+        return ""
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+    )
+    out, _ = await proc.communicate()
+    return out.decode().splitlines()[0].strip() if out else ""
+
+
 @app.get("/api/health")
 async def health():
-    version = ""
-    if shutil.which("yt-dlp"):
-        proc = await asyncio.create_subprocess_exec(
-            "yt-dlp", "--version", stdout=asyncio.subprocess.PIPE,
-        )
-        out, _ = await proc.communicate()
-        version = out.decode().strip()
+    version = await _cmd_version("yt-dlp", "--version")
+    try:
+        from importlib.metadata import version as pkg_version
+        ejs = pkg_version("yt-dlp-ejs")
+    except Exception:
+        ejs = ""
     return {
         "ok": bool(version),
         "ytdlp": version,
+        "deno": await _cmd_version("deno", "--version"),
+        "ejs": ejs,
+        "deno_dir_writable": os.access(os.environ.get("DENO_DIR", "/tmp"), os.W_OK)
+                             or not os.path.exists(os.environ.get("DENO_DIR", "/tmp")),
         "pot_provider": bool(POT_PROVIDER_URL),
         "cookies": bool(COOKIES_FILE and os.path.exists(COOKIES_FILE)),
     }
@@ -185,6 +203,28 @@ async def fetch_merged(url: str, extra: list[str]) -> FileResponse | str:
         media_type="video/mp4",
         background=BackgroundTask(shutil.rmtree, tmpdir, ignore_errors=True),
     )
+
+
+@app.get("/api/debug")
+async def debug(url: str = Query(..., max_length=500)):
+    """Verbose yt-dlp run for diagnosing extraction issues (read-only)."""
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "URL no válida")
+    args = [
+        "yt-dlp", "-v", "--list-formats", "--no-playlist", "--force-ipv4",
+        "--js-runtimes", "deno", "--impersonate", "chrome",
+    ]
+    if COOKIES_FILE and os.path.exists(COOKIES_FILE):
+        args += ["--cookies", COOKIES_FILE]
+    if POT_PROVIDER_URL:
+        args += ["--extractor-args", f"youtubepot-bgutilhttp:base_url={POT_PROVIDER_URL}"]
+    proc = await asyncio.create_subprocess_exec(
+        *args, url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    out, _ = await proc.communicate()
+    return PlainTextResponse(out.decode(errors="replace")[-10000:])
 
 
 @app.get("/api/fetch")
