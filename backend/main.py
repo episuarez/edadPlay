@@ -144,24 +144,27 @@ async def health():
     }
 
 
-async def fetch_merged(url: str, extra: list[str]) -> FileResponse | None:
+async def fetch_merged(url: str, extra: list[str]) -> FileResponse | str:
     """Download separate video+audio streams and merge with ffmpeg.
 
     Used when no progressive format exists: merging can't go through a pipe,
     so this downloads to a temp dir, streams the file and deletes it after.
+    Returns the stderr text on failure so the caller can classify it.
     """
     tmpdir = tempfile.mkdtemp(prefix="edadplay-")
     proc = await asyncio.create_subprocess_exec(
         *base_args(FORMAT_MERGE, os.path.join(tmpdir, "video.%(ext)s")),
         "--merge-output-format", "mp4", *extra, url,
         stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
     )
+    stderr = (await proc.stderr.read()).decode(errors="replace")
     await proc.wait()
     files = os.listdir(tmpdir) if proc.returncode == 0 else []
     if not files:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        return None
+        print(f"[fetch_merged] failed for {url}: {stderr[-500:]}", flush=True)
+        return stderr
     return FileResponse(
         os.path.join(tmpdir, files[0]),
         media_type="video/mp4",
@@ -200,14 +203,13 @@ async def fetch(url: str = Query(..., max_length=500)):
 
             stderr = (await proc.stderr.read()).decode(errors="replace")
             await proc.wait()
+            print(f"[fetch] attempt {extra} failed for {url}: {stderr[-500:]}", flush=True)
 
             if "requested format is not available" in stderr.lower():
                 merged = await fetch_merged(url, extra)
-                if merged:
+                if isinstance(merged, FileResponse):
                     return merged
-                last_error = HTTPException(
-                    502, "La plataforma no ofrece un formato descargable para este vídeo. "
-                         "Descarga el vídeo y usa «Archivo local».")
+                last_error = classify_error(merged or stderr)
                 continue
 
             last_error = classify_error(stderr)
