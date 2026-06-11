@@ -50,7 +50,7 @@ async def self_update_loop():
         with contextlib.suppress(Exception):
             proc = await asyncio.create_subprocess_exec(
                 sys.executable, "-m", "pip", "install", "-q", "-U",
-                "yt-dlp[default]", "bgutil-ytdlp-pot-provider",
+                "yt-dlp[default,curl-cffi]", "bgutil-ytdlp-pot-provider",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -68,6 +68,9 @@ def base_args() -> list[str]:
         "yt-dlp", "--quiet", "--no-warnings", "--no-playlist",
         "--match-filter", f"duration<={MAX_DURATION}",
         "--socket-timeout", "20",
+        "--retries", "3",
+        "--fragment-retries", "3",
+        "--force-ipv4",
         "-f", FORMAT,
         "-o", "-",
     ]
@@ -78,11 +81,15 @@ def base_args() -> list[str]:
     return args
 
 
-# Attempt chain: default first (POT plugin engages automatically), then an
-# explicit multi-client fallback recommended by the yt-dlp PO Token guide.
+# Attempt chain: default first (POT plugin engages automatically), then
+# Chrome TLS impersonation (Google drops plain-Python TLS handshakes from
+# datacenter IPs with SSL EOF errors), then the multi-client fallback
+# recommended by the yt-dlp PO Token guide.
 ATTEMPT_EXTRA_ARGS = [
     [],
-    ["--extractor-args", "youtube:player_client=default,mweb,web_safari,tv_embedded"],
+    ["--impersonate", "chrome"],
+    ["--impersonate", "chrome",
+     "--extractor-args", "youtube:player_client=default,mweb,web_safari,tv_embedded"],
 ]
 
 
@@ -100,6 +107,9 @@ def classify_error(stderr: str) -> HTTPException:
                                   "TikTok, Twitch y cientos de sitios más.")
     if "video unavailable" in s or "404" in s:
         return HTTPException(404, "El vídeo no existe o ha sido retirado.")
+    if "unexpected_eof" in s or "ssl" in s or "connection reset" in s or "timed out" in s:
+        return HTTPException(503, "La plataforma está cortando las conexiones de este servidor. "
+                                  "Prueba de nuevo en unos minutos o descarga el vídeo y usa «Archivo local».")
     if "match-filter" in s or not s.strip():
         return HTTPException(413, f"El vídeo supera la duración máxima permitida ({MAX_DURATION // 60} min).")
     return HTTPException(502, f"No se pudo obtener el vídeo: {stderr[-300:]}")
@@ -154,8 +164,8 @@ async def fetch(url: str = Query(..., max_length=500)):
             stderr = (await proc.stderr.read()).decode(errors="replace")
             await proc.wait()
             last_error = classify_error(stderr)
-            # Only the bot-detection error benefits from trying another client.
-            if last_error.status_code != 503:
+            # Only retryable network/bot errors benefit from another attempt.
+            if last_error.status_code not in (502, 503):
                 break
 
         raise last_error or HTTPException(502, "Fallo desconocido")

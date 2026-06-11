@@ -82,8 +82,8 @@ navegador (no almacena nada). Para activarlo:
 3. Limita `ALLOWED_ORIGINS` a tu dominio de GitHub Pages.
 
 Coste por vídeo ≈ ancho de banda (30–80 MB a 480p). CPU irrelevante (no se
-transcodifica). Despliegue recomendado: **Oracle Cloud Always Free** (0 €,
-10 TB/mes) — guía paso a paso en [`backend/DEPLOY_ORACLE.md`](backend/DEPLOY_ORACLE.md).
+transcodifica). Despliegue recomendado: **Hugging Face Spaces** (0 €, Docker,
+HTTPS automático) — guía paso a paso en [`backend/DEPLOY_HF.md`](backend/DEPLOY_HF.md).
 
 Anti-bloqueo incluido: PO Token provider (bgutil) para IPs de datacenter,
 cadena de clientes de respaldo (`mweb`, `web_safari`, `tv_embedded`),

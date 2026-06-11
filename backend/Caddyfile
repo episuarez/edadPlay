@@ -1,8 +1,0 @@
-{$DOMAIN} {
-	reverse_proxy backend:8000
-
-	header {
-		# Caddy terminates TLS; FastAPI already sets CORS headers.
-		-Server
-	}
-}
