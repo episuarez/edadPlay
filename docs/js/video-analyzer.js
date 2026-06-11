@@ -240,7 +240,14 @@ async function playbackPass(video, ctx, collector, duration, onProgress) {
   video.playbackRate = PLAYBACK_RATE;
   await video.play();
 
-  await new Promise((resolve, reject) => {
+  // Chrome pauses muted (video-only) media in background/occluded tabs to
+  // save power, stalling long analyses. Resume immediately.
+  video.onpause = () => {
+    if (!video.ended) video.play().catch(() => {});
+  };
+
+  try {
+    await new Promise((resolve, reject) => {
     video.onerror = () => reject(new Error('Error de decodificación durante el análisis.'));
     video.onended = resolve;
 
@@ -270,7 +277,10 @@ async function playbackPass(video, ctx, collector, duration, onProgress) {
       }, 33);
       video.addEventListener('ended', () => clearInterval(timer), { once: true });
     }
-  });
+    });
+  } finally {
+    video.onpause = null;
+  }
 }
 
 async function seekPass(video, ctx, collector, duration, onProgress) {

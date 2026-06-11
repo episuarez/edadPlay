@@ -217,6 +217,10 @@ async function analyze(file) {
   let videoP = 0;
   let audioP = 0;
 
+  // Keep the screen awake: analysis stalls if the OS suspends the tab.
+  let wakeLock = null;
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* unsupported */ }
+
   try {
     const [videoResult, audioResult] = await Promise.all([
       analyzeVideoFile(file, { onProgress: (p) => { videoP = p; setProgress(videoP, audioP); } }),
@@ -238,7 +242,7 @@ async function analyze(file) {
 
     const overall = overallRating(intervals);
     const elapsed = (performance.now() - t0) / 1000;
-    renderResults({
+    const result = {
       fileName: file.name,
       duration: videoResult.duration,
       intervals,
@@ -246,10 +250,16 @@ async function analyze(file) {
       elapsed,
       degraded: videoResult.degraded,
       hasAudio: audioResult !== null,
-    });
+    };
+    renderResults(result);
+    // Automation hook: batch tooling (Playwright) polls this global.
+    window.__edadplayResult = result;
+    document.dispatchEvent(new CustomEvent('edadplay:done'));
   } catch (e) {
     showError(e.message || 'Error inesperado durante el análisis.');
+    window.__edadplayError = e.message || 'unknown';
   } finally {
+    wakeLock?.release().catch(() => {});
     stopProgress();
   }
 }
