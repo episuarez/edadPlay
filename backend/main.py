@@ -74,7 +74,7 @@ async def startup():
 
 def base_args(fmt: str = FORMAT, output: str = "-") -> list[str]:
     args = [
-        "yt-dlp", "--quiet", "--no-warnings", "--no-playlist",
+        "yt-dlp", "--quiet", "--no-playlist",
         "--match-filter", f"duration<={MAX_DURATION}",
         "--socket-timeout", "20",
         "--retries", "3",
@@ -98,10 +98,16 @@ def base_args(fmt: str = FORMAT, output: str = "-") -> list[str]:
 # datacenter IPs with SSL EOF errors), then the multi-client fallback
 # recommended by the yt-dlp PO Token guide.
 ATTEMPT_EXTRA_ARGS = [
-    [],
+    # Chrome TLS first: Google drops plain-Python handshakes from
+    # datacenter IPs with SSL EOF, so the bare attempt always wastes time.
     ["--impersonate", "chrome"],
     ["--impersonate", "chrome",
      "--extractor-args", "youtube:player_client=default,mweb,web_safari,tv_embedded"],
+    # Last resort: include formats yt-dlp hides because their GVS PO token
+    # could not be minted — they often still download fine.
+    ["--impersonate", "chrome",
+     "--extractor-args",
+     "youtube:player_client=default,mweb,web_safari,tv_embedded;formats=missing_pot"],
 ]
 
 
@@ -164,6 +170,15 @@ async def fetch_merged(url: str, extra: list[str]) -> FileResponse | str:
     if not files:
         shutil.rmtree(tmpdir, ignore_errors=True)
         print(f"[fetch_merged] failed for {url}: {stderr[-500:]}", flush=True)
+        if "requested format is not available" in stderr.lower():
+            lf = await asyncio.create_subprocess_exec(
+                *[a for a in base_args() if a not in ("-o", "-")],
+                "--list-formats", *extra, url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await lf.communicate()
+            print(f"[fetch_merged] formats seen:\n{out.decode(errors='replace')[-1500:]}", flush=True)
         return stderr
     return FileResponse(
         os.path.join(tmpdir, files[0]),
