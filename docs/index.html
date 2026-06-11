@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdadPlay — ¿Para qué edad es este vídeo?</title>
+  <meta name="description" content="Analiza cualquier vídeo en tu navegador y obtén una recomendación de edad clara, con gráficas y explicaciones basadas en ciencia. 100% local y gratuito.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%237B61FF%22/><text x=%2250%22 y=%2272%22 font-size=%2260%22 text-anchor=%22middle%22>🎬</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:wght@600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <a class="logo" href="#" id="logo-link">
+      <span class="logo-mark"><i data-lucide="clapperboard"></i></span>
+      <span class="wordmark">EdadPlay</span>
+    </a>
+    <div class="nav-links">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#metodologia">Metodología</a>
+      <a href="#referencias">Referencias</a>
+    </div>
+    <span class="privacy-badge"><i data-lucide="shield-check"></i> 100% local · nada se sube a servidores</span>
+  </nav>
+
+  <!-- ============ HOME VIEW ============ -->
+  <div id="view-home">
+
+    <header class="hero">
+      <span class="deco-pill age-pill band-0" style="left:6%; top:38%; transform:rotate(-8deg)"><span class="dot"></span>0–3 años</span>
+      <span class="deco-pill age-pill band-1" style="left:10%; top:62%; transform:rotate(6deg)"><span class="dot"></span>4–6 años</span>
+      <span class="deco-pill age-pill band-2" style="right:8%; top:40%; transform:rotate(7deg)"><span class="dot"></span>7–12 años</span>
+      <span class="deco-pill age-pill band-3" style="right:11%; top:64%; transform:rotate(-6deg)"><span class="dot"></span>13+ años</span>
+
+      <span class="section-tag"><i data-lucide="sparkles"></i> ANÁLISIS CON BASE CIENTÍFICA</span>
+      <h1>¿Para qué edad es este vídeo?</h1>
+      <p class="subtitle">Analiza cualquier vídeo en tu navegador y obtén una recomendación de edad clara, con gráficas y explicaciones que entiende todo el mundo.</p>
+
+      <div class="input-tile">
+        <div class="source-tabs" role="tablist">
+          <button class="source-tab active" data-tab="file" role="tab"><i data-lucide="hard-drive"></i> Archivo local</button>
+          <button class="source-tab" data-tab="url" role="tab"><i data-lucide="link"></i> Pegar URL</button>
+          <button class="source-tab" data-tab="youtube" role="tab"><i data-lucide="youtube"></i> YouTube</button>
+        </div>
+
+        <div id="error-box" class="error-box" hidden></div>
+
+        <div id="panel-file" class="tab-panel">
+          <div id="dropzone" class="drop-area" role="button" tabindex="0" aria-label="Subir vídeo">
+            <span class="drop-icon-wrap"><i data-lucide="clapperboard"></i></span>
+            <span class="drop-title">Arrastra un vídeo aquí o haz clic para seleccionar</span>
+            <p class="drop-caption">MP4, WebM o MOV · el análisis tarda aproximadamente ¼ de la duración del vídeo</p>
+          </div>
+          <input type="file" id="file-input" accept="video/*,.mkv" hidden>
+        </div>
+
+        <div id="panel-url" class="tab-panel url-panel" hidden>
+          <label for="url-input">URL directa de un archivo de vídeo</label>
+          <input type="url" id="url-input" placeholder="https://ejemplo.com/video.mp4">
+          <p class="hint">El servidor de origen debe permitir el acceso desde otras webs (CORS). El vídeo se descarga y analiza solo en tu dispositivo.</p>
+        </div>
+
+        <div id="panel-youtube" class="tab-panel url-panel" hidden>
+          <label for="youtube-input">Enlace de YouTube, Vimeo, Dailymotion, TikTok…</label>
+          <input type="url" id="youtube-input" placeholder="https://www.youtube.com/watch?v=…">
+          <p class="hint" id="youtube-hint">Se obtiene a través de un pequeño servidor de descarga y se analiza solo en tu dispositivo. Instagram y Facebook no están soportados (requieren inicio de sesión).</p>
+        </div>
+
+        <div id="progress-wrap" class="progress-wrap" hidden>
+          <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
+          <p id="progress-label" class="progress-label">Analizando…</p>
+        </div>
+
+        <div class="input-bottom">
+          <div class="mode-wrap">
+            <div class="mode-toggle">
+              <button class="mode-btn active" data-mode="basico"><i data-lucide="smile"></i> Modo básico</button>
+              <button class="mode-btn" data-mode="experto"><i data-lucide="chart-no-axes-column"></i> Modo experto</button>
+            </div>
+            <p class="mode-hint">Básico: veredicto sencillo · Experto: todas las gráficas y métricas</p>
+          </div>
+          <button id="analyze-btn" class="btn-primary"><i data-lucide="sparkles"></i> Analizar vídeo</button>
+        </div>
+      </div>
+
+      <p class="hero-note">¿El vídeo está en YouTube u otra web? Pega el enlace: se descarga y analiza solo en tu dispositivo.</p>
+    </header>
+
+    <section class="section" id="como-funciona">
+      <div class="section-head">
+        <span class="section-tag"><i data-lucide="route"></i> CÓMO FUNCIONA</span>
+        <h2>Tres pasos, cero complicaciones</h2>
+      </div>
+      <div class="cards-row cards-3">
+        <div class="tile">
+          <div class="step-top">
+            <span class="icon-wrap lg"><i data-lucide="clapperboard"></i></span>
+            <span class="step-num">1</span>
+          </div>
+          <h3>Elige el vídeo</h3>
+          <p class="desc">Un archivo de tu dispositivo, una URL o un enlace de YouTube. Nada sale de tu navegador.</p>
+        </div>
+        <div class="tile">
+          <div class="step-top">
+            <span class="icon-wrap lg"><i data-lucide="cpu"></i></span>
+            <span class="step-num">2</span>
+          </div>
+          <h3>Análisis en tu navegador</h3>
+          <p class="desc">Medimos cortes, destellos, volumen, sonido, movimiento y complejidad visual, minuto a minuto.</p>
+        </div>
+        <div class="tile">
+          <div class="step-top">
+            <span class="icon-wrap lg"><i data-lucide="badge-check"></i></span>
+            <span class="step-num">3</span>
+          </div>
+          <h3>Recomendación de edad</h3>
+          <p class="desc">Recibes una edad recomendada con gráficas, momentos intensos y explicaciones en lenguaje claro.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="edades">
+      <div class="section-head">
+        <span class="section-tag"><i data-lucide="users"></i> GUÍA POR EDADES</span>
+        <h2>¿Qué tolera bien cada edad?</h2>
+        <p class="sub">Límites orientativos por minuto de vídeo. Si una métrica supera el umbral de una edad, EdadPlay recomienda la siguiente franja.</p>
+      </div>
+      <div class="cards-row cards-4" id="age-cards"></div>
+      <div class="oms-note">
+        <i data-lucide="heart-pulse"></i>
+        <span>La OMS y la AAP recomiendan evitar pantallas antes de los 18–24 meses y limitarlas a 1 hora de contenido pausado y supervisado entre los 2 y 5 años. Mantén además la escucha por debajo de 75 dB (escucha segura infantil).</span>
+      </div>
+    </section>
+
+    <section class="section" id="metodologia">
+      <div class="section-head">
+        <span class="section-tag"><i data-lucide="flask-conical"></i> METODOLOGÍA</span>
+        <h2>Qué medimos y por qué importa</h2>
+        <p class="sub">Seis métricas con base científica, explicadas para que las entienda cualquiera.</p>
+      </div>
+      <div class="cards-row cards-3" id="meth-cards"></div>
+      <div class="combine-tile">
+        <div class="combine-left">
+          <h3>Cómo se combina todo</h3>
+          <p>El vídeo se divide en tramos de 60 segundos. Cada tramo recibe la edad que exige su métrica más restrictiva. La clasificación global es el percentil 90 de los tramos: la intensidad sostenida manda y un único pico aislado no domina — esos picos se listan aparte como «momentos más intensos». Una violación del límite de destellos siempre genera advertencia.</p>
+        </div>
+        <div class="combine-schematic">
+          <span class="schematic-label">TRAMOS DE 60 s → EDAD POR TRAMO</span>
+          <div class="segment-row">
+            <span style="background:var(--age-0-3)"></span><span style="background:var(--age-4-6)"></span><span style="background:var(--age-4-6)"></span><span style="background:var(--age-7-12)"></span><span style="background:var(--age-13)"></span><span style="background:var(--age-7-12)"></span><span style="background:var(--age-4-6)"></span><span style="background:var(--age-7-12)"></span><span style="background:var(--age-13)"></span><span style="background:var(--age-7-12)"></span>
+          </div>
+          <div class="result-row">
+            <span class="p90">percentil 90</span>
+            <span class="result-pill"><i data-lucide="badge-check"></i> 13+</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="referencias">
+      <div class="section-head">
+        <span class="section-tag"><i data-lucide="book-open"></i> REFERENCIAS</span>
+        <h2 style="font-size:28px">La ciencia detrás de EdadPlay</h2>
+      </div>
+      <div class="refs-grid" id="refs-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="cta-box">
+        <h2>Decide con confianza qué ve tu peque</h2>
+        <p>Gratis, de código abierto y 100 % privado: todo se analiza en tu dispositivo.</p>
+        <button class="btn-white" data-scroll-top><i data-lucide="sparkles"></i> Analizar vídeo</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ RESULTS VIEW ============ -->
+  <div id="view-results" hidden>
+
+    <section class="result-hero">
+      <div class="meta-row">
+        <div class="meta-left">
+          <span class="chip chip-file"><i data-lucide="film"></i> <span id="r-file"></span></span>
+          <span class="chip chip-done"><i data-lucide="check"></i> <span id="r-done"></span></span>
+        </div>
+        <div class="meta-right">
+          <button class="btn-soft" id="download-report"><i data-lucide="download"></i> Descargar informe</button>
+          <button class="btn-primary" data-new-analysis><i data-lucide="rotate-ccw"></i> Analizar otro vídeo</button>
+        </div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-tile">
+          <div class="verdict-big">
+            <div class="verdict-circle" id="r-age-circle"></div>
+            <span class="confidence-chip"><i data-lucide="gauge"></i> <span id="r-confidence"></span></span>
+          </div>
+          <div class="verdict-texts">
+            <span class="verdict-label">EDAD RECOMENDADA</span>
+            <span class="verdict-title" id="r-verdict-title"></span>
+            <p class="verdict-summary" id="r-verdict-summary"></p>
+          </div>
+        </div>
+        <div class="verdict-side">
+          <div class="warning-tile" id="r-warning" hidden>
+            <span class="head"><i data-lucide="triangle-alert"></i> <span id="r-warning-title">Advertencia de destellos</span></span>
+            <p id="r-warning-text"></p>
+          </div>
+          <div class="advice-tile">
+            <span class="head"><i data-lucide="lightbulb"></i> En pocas palabras</span>
+            <p id="r-advice"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="timeline-section expert-only">
+      <div class="timeline-row">
+        <div class="tile timeline-tile">
+          <div class="tl-head">
+            <div>
+              <h3>Intensidad minuto a minuto</h3>
+              <p class="tl-sub">Cada barra es un tramo de 60 s · el color indica la edad que exige</p>
+            </div>
+            <div class="legend">
+              <span class="legend-item"><span class="dot" style="background:var(--age-0-3)"></span>0–3</span>
+              <span class="legend-item"><span class="dot" style="background:var(--age-4-6)"></span>4–6</span>
+              <span class="legend-item"><span class="dot" style="background:var(--age-7-12)"></span>7–12</span>
+              <span class="legend-item"><span class="dot" style="background:var(--age-13)"></span>13+</span>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <div class="bars" id="r-bars"></div>
+            <div class="x-labels" id="r-xlabels"></div>
+          </div>
+          <div class="tl-foot">
+            <i data-lucide="info"></i>
+            <span>La clasificación global usa el percentil 90: la intensidad sostenida manda, un pico aislado no.</span>
+          </div>
+        </div>
+        <div class="tile moments-tile" id="r-moments-tile">
+          <span class="head"><i data-lucide="flame"></i> Momentos más intensos</span>
+          <div id="r-moments"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics-section expert-only">
+      <div class="metrics-head">
+        <div>
+          <h2>Métricas en detalle</h2>
+          <p class="sub">Cada métrica se compara con los umbrales por edad. La más exigente decide.</p>
+        </div>
+        <span class="section-tag"><i data-lucide="chart-no-axes-column"></i> MODO EXPERTO</span>
+      </div>
+      <div class="metrics-grid" id="r-metrics"></div>
+      <div class="distribution-row">
+        <div class="tile donut-tile">
+          <div class="donut" id="r-donut">
+            <div class="donut-center">
+              <div class="donut-num" id="r-donut-num"></div>
+              <div class="donut-cap">tramos</div>
+            </div>
+          </div>
+          <div class="donut-right">
+            <h3>Distribución de tramos</h3>
+            <div id="r-dist"></div>
+          </div>
+        </div>
+        <div class="tile tips-tile" id="tips-tile-expert">
+          <span class="head"><i data-lucide="heart-handshake"></i> Qué puedes hacer</span>
+          <div class="tips-grid" id="r-tips"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics-section basic-only" id="basic-tips-section" hidden>
+      <div class="row-1200 tile tips-tile">
+        <span class="head"><i data-lucide="heart-handshake"></i> Qué puedes hacer</span>
+        <div class="tips-grid" id="r-tips-basic"></div>
+      </div>
+    </section>
+
+    <section class="result-cta-section">
+      <div class="result-cta">
+        <div>
+          <h2>¿Otro vídeo en la lista?</h2>
+          <p>Analiza tantos como quieras: todo ocurre en tu navegador, gratis y sin subir nada.</p>
+        </div>
+        <button class="btn-white" data-new-analysis><i data-lucide="rotate-ccw"></i> Analizar otro vídeo</button>
+      </div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <span class="footer-logo"><span class="footer-mark"><i data-lucide="clapperboard"></i></span> EdadPlay</span>
+    <p class="footer-text">Herramienta orientativa: no sustituye el criterio de padres o profesionales. Código abierto · análisis 100 % local.</p>
+    <span class="footer-right"><i data-lucide="github"></i> <span>Privacidad</span></span>
+  </footer>
+
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

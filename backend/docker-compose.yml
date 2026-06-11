@@ -1,0 +1,43 @@
+services:
+  backend:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Restrict to your GitHub Pages origin, e.g. https://usuario.github.io
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      MAX_DURATION_SECONDS: "3600"
+      POT_PROVIDER_URL: http://bgutil-provider:4416
+      # Optional: mount an exported cookies.txt and uncomment.
+      # COOKIES_FILE: /data/cookies.txt
+    # volumes:
+    #   - ./cookies.txt:/data/cookies.txt:ro
+    depends_on:
+      - bgutil-provider
+    expose:
+      - "8000"
+
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    restart: unless-stopped
+    init: true
+    expose:
+      - "4416"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Define DOMAIN, p.ej. edadplay.duckdns.org}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

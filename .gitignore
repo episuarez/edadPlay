@@ -172,3 +172,16 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Claude Code tooling
+.context-mode/
+.code-review-graph/
+CLAUDE.md.bak
+.serena/
+.swarm/
+.claude-flow/
+.claude/init-snapshot.json
+settings.json.bak
+
+# Playwright MCP artifacts
+.playwright-mcp/
