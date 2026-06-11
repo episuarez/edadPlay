@@ -185,3 +185,7 @@ settings.json.bak
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+# Local AI tooling
+.claude/
+CLAUDE.md
